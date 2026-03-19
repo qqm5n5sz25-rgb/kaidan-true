@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>怪談生成器</title>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0705;--cp:#ffad5a;--ca:#ff6b1a;--blood:#8b0000;--ink:#c8b89a;--dim:#7a6a55;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:'Shippori Mincho','Hiragino Mincho ProN',serif;overflow-x:hidden;}
+.screen{display:none;min-height:100vh;}
+.screen.active{display:flex;flex-direction:column;}
+#screen-input{background:var(--bg);align-items:stretch;}
+.s-header{text-align:center;padding:52px 20px 28px;}
+.s-title{font-size:clamp(1.7rem,8vw,2.8rem);font-weight:700;letter-spacing:.3em;color:var(--cp);text-shadow:0 0 40px rgba(255,107,26,.6),0 0 80px rgba(255,69,0,.3);animation:titleFlicker 8s infinite;}
+.s-sub{font-size:.75rem;letter-spacing:.5em;color:var(--dim);margin-top:6px;}
+.input-card{margin:0 16px 40px;background:linear-gradient(135deg,#1a1108,#130e08);border:1px solid rgba(200,184,154,.12);border-radius:8px;padding:24px;box-shadow:0 8px 60px rgba(0,0,0,.7);}
+.field-label{font-size:.68rem;letter-spacing:.4em;color:var(--ca);display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.field-label::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(255,107,26,.3),transparent);}
+.apikey-input,.kw-input{width:100%;padding:13px 14px;background:rgba(0,0,0,.5);color:var(--ink);border:1px solid rgba(200,184,154,.15);border-radius:6px;font-family:inherit;font-size:.9rem;outline:none;-webkit-appearance:none;}
+.apikey-input{font-family:monospace;font-size:.78rem;}
+input::placeholder{color:rgba(122,106,85,.6);}
+.hint{font-size:.66rem;color:var(--dim);margin-top:6px;letter-spacing:.04em;line-height:1.6;}
+.divider{height:1px;background:rgba(200,184,154,.08);margin:20px 0;}
+.gen-btn{width:100%;margin-top:20px;padding:17px;background:linear-gradient(135deg,#5a0000,#8b0000 50%,#5a0000);border:1px solid rgba(200,100,50,.4);border-radius:6px;color:var(--cp);font-family:inherit;font-size:1rem;font-weight:700;letter-spacing:.5em;text-shadow:0 0 20px rgba(255,107,26,.8);cursor:pointer;-webkit-appearance:none;}
+.gen-btn:active{opacity:.7;}
+
+/* ローディング */
+#screen-loading{background:rgba(5,3,2,.98);align-items:center;justify-content:center;padding:40px 20px;}
+.loading-candle{margin-bottom:36px;}
+.loading-title{font-size:.95rem;letter-spacing:.6em;color:var(--cp);margin-bottom:8px;}
+.loading-phase{font-size:.73rem;letter-spacing:.2em;color:var(--dim);margin-bottom:28px;min-height:1.5em;text-align:center;line-height:1.7;}
+.prog-wrap{width:260px;margin-bottom:8px;}
+.prog-track{height:3px;background:rgba(200,184,154,.1);border-radius:2px;overflow:hidden;}
+.prog-fill{height:100%;width:0%;background:linear-gradient(90deg,#8b0000,#ff6b1a);border-radius:2px;transition:width .6s ease;}
+.prog-pct{text-align:right;font-size:.7rem;color:var(--ca);margin-top:5px;}
+.step-list{display:flex;flex-direction:column;gap:8px;width:260px;margin-top:14px;}
+.step-item{display:flex;align-items:center;gap:10px;font-size:.7rem;letter-spacing:.12em;transition:all .4s;}
+.step-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;transition:all .4s;}
+
+/* 怪談表示 */
+#screen-story{background:var(--bg);}
+.story-card{margin:0 16px 40px;background:linear-gradient(135deg,#140e08,#0f0a06);border:1px solid rgba(200,184,154,.1);border-radius:8px;padding:28px 24px;position:relative;overflow:hidden;}
+.story-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,transparent,#8b0000,transparent);}
+.story-title{font-size:1.15rem;font-weight:700;color:var(--cp);letter-spacing:.25em;margin-bottom:8px;}
+.story-meta{font-size:.65rem;color:var(--dim);letter-spacing:.15em;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid rgba(200,184,154,.08);}
+.story-body{font-size:.9rem;line-height:2.1;letter-spacing:.07em;color:var(--ink);white-space:pre-wrap;}
+.action-row{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;}
+.play-btn{flex:1;min-width:120px;padding:13px 10px;background:linear-gradient(135deg,#3a0000,#6b0000);border:1px solid rgba(200,100,50,.4);border-radius:6px;color:var(--cp);font-family:inherit;font-size:.78rem;font-weight:700;letter-spacing:.3em;cursor:pointer;-webkit-appearance:none;}
+.play-btn:active{opacity:.7;}
+.sub-btn{padding:13px 14px;background:none;border:1px solid rgba(200,184,154,.2);border-radius:6px;color:var(--dim);font-family:inherit;font-size:.75rem;letter-spacing:.25em;cursor:pointer;-webkit-appearance:none;}
+.sub-btn:active{opacity:.6;}
+
+/* プレイヤー */
+#screen-player{background:#050302;justify-content:space-between;}
+.candle-scene{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+.wall-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 75%,rgba(255,80,0,.08),transparent 60%);animation:wallShadow 3s ease-in-out infinite;}
+.subtitle-area{min-height:110px;max-height:160px;background:linear-gradient(0deg,rgba(0,0,0,.97),rgba(5,3,2,.8));padding:16px 24px;display:flex;align-items:center;justify-content:center;border-top:1px solid rgba(200,184,154,.07);}
+.subtitle-text{font-size:clamp(.9rem,4vw,1.15rem);color:#e8d5b0;text-align:center;line-height:1.95;letter-spacing:.1em;text-shadow:0 0 30px rgba(255,200,100,.4);max-width:600px;transition:opacity .3s;}
+.subtitle-text.fade{opacity:0;}
+.ctrl-bar{background:rgba(8,5,3,.97);padding:12px 20px;display:flex;align-items:center;gap:10px;border-top:1px solid rgba(200,184,154,.06);padding-bottom:max(12px,env(safe-area-inset-bottom));}
+.ctrl-btn{padding:9px 14px;border-radius:4px;background:none;font-family:inherit;font-size:.68rem;letter-spacing:.25em;cursor:pointer;-webkit-appearance:none;white-space:nowrap;}
+.ctrl-btn:active{opacity:.6;}
+.ctrl-normal{border:1px solid rgba(200,184,154,.2);color:var(--ink);}
+.ctrl-danger{border:1px solid rgba(139,0,0,.5);color:rgba(200,100,100,.8);}
+.player-title-bar{flex:1;font-size:.7rem;color:var(--dim);letter-spacing:.12em;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ロウソク本体（炎はcanvas） */
+.candle-wrap{position:relative;display:flex;flex-direction:column;align-items:center;}
+.candle-glow-bg{position:absolute;top:-30px;left:50%;transform:translateX(-50%);width:200px;height:200px;border-radius:50%;pointer-events:none;}
+.flame-canvas-wrap{position:relative;width:60px;height:110px;margin-bottom:-4px;}
+.flame-canvas{position:absolute;bottom:0;left:50%;transform:translateX(-50%);}
+.candle-body{width:38px;height:140px;background:linear-gradient(90deg,#d8cbb8,#ede8de 25%,#faf7f2 50%,#e8ddd0 75%,#c8baa8);border-radius:4px 4px 2px 2px;box-shadow:-6px 0 16px rgba(0,0,0,.6),2px 0 6px rgba(255,255,255,.08);position:relative;overflow:hidden;}
+.candle-texture{position:absolute;inset:0;background:repeating-linear-gradient(180deg,transparent,transparent 18px,rgba(0,0,0,.03) 18px,rgba(0,0,0,.03) 19px);pointer-events:none;}
+.candle-wax-drip{position:absolute;top:0;left:4px;width:8px;height:36px;background:linear-gradient(180deg,rgba(240,228,210,.95) 60%,transparent);border-radius:0 0 60% 60%;}
+.candle-wax-drip2{position:absolute;top:0;right:6px;width:5px;height:22px;background:linear-gradient(180deg,rgba(240,228,210,.8) 60%,transparent);border-radius:0 0 60% 60%;}
+.candle-wick{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:2px;height:8px;background:#2a1a0a;border-radius:1px;}
+.candle-holder{width:64px;height:14px;background:linear-gradient(180deg,#4a3525,#1e1008);border-radius:3px;box-shadow:0 8px 24px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.05);position:relative;}
+.candle-holder::before{content:'';position:absolute;top:-5px;left:-8px;right:-8px;height:7px;background:linear-gradient(180deg,#5a4535,#2e1a0e);border-radius:3px;}
+.candle-holder::after{content:'';position:absolute;bottom:-3px;left:4px;right:4px;height:3px;background:rgba(0,0,0,.5);border-radius:50%;filter:blur(3px);}
+
+/* 煙 */
+.smoke-wrap{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);width:20px;height:60px;pointer-events:none;}
+.smoke-particle{position:absolute;bottom:0;left:50%;width:4px;height:4px;background:rgba(200,200,200,.15);border-radius:50%;transform:translateX(-50%);animation:smokeRise 3s ease-out infinite;}
+.smoke-particle:nth-child(2){animation-delay:.8s;animation-duration:3.5s;}
+.smoke-particle:nth-child(3){animation-delay:1.6s;animation-duration:4s;}
+@keyframes smokeRise{0%{transform:translateX(-50%) scale(1);opacity:.2;bottom:0;}100%{transform:translateX(calc(-50% + 8px)) scale(4);opacity:0;bottom:55px;}}
+
+/* アニメーション */
+@keyframes titleFlicker{0%,100%{opacity:1;}92%{opacity:1;}93%{opacity:.5;}94%{opacity:1;}97%{opacity:.75;}98%{opacity:1;}}
+@keyframes wallShadow{0%,100%{opacity:.5;}50%{opacity:1;}}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:rgba(200,184,154,.15);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<template id="candle-tpl">
+  <div class="candle-wrap">
+    <canvas class="candle-glow-bg" width="200" height="200" id="glow-canvas"></canvas>
+    <div class="smoke-wrap">
+      <div class="smoke-particle"></div>
+      <div class="smoke-particle"></div>
+      <div class="smoke-particle"></div>
+    </div>
+    <div class="flame-canvas-wrap">
+      <canvas class="flame-canvas" width="80" height="110" id="flame-canvas"></canvas>
+    </div>
+    <div class="candle-body">
+      <div class="candle-texture"></div>
+      <div class="candle-wax-drip"></div>
+      <div class="candle-wax-drip2"></div>
+      <div class="candle-wick"></div>
+    </div>
+    <div class="candle-holder"></div>
+  </div>
+</template>
+
+<!-- 入力画面 -->
+<div id="screen-input" class="screen active">
+  <div class="s-header">
+    <div class="s-title">怪　談　生　成　器</div>
+    <div class="s-sub">─ 闇 の 語 り 部 ─</div>
+  </div>
+  <div class="input-card">
+    <div class="field-label">Anthropic APIキー</div>
+    <input type="password" id="apikey" class="apikey-input" placeholder="sk-ant-api03-..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="hint">取得：console.anthropic.com → API Keys</div>
+    <div class="divider"></div>
+    <div class="field-label">呪いのキーワード</div>
+    <input type="text" id="keyword" class="kw-input" placeholder="例：古井戸、赤い着物、子守唄" autocorrect="off">
+    <div class="hint">怪談の題材となるキーワードを入力してください</div>
+    <button class="gen-btn" onclick="startGenerate()">▲ 怪談を紡ぐ ▲</button>
+    <div id="err-box" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(139,0,0,.3);border:1px solid rgba(200,50,50,.4);border-radius:6px;font-size:.75rem;color:#ff9999;line-height:1.7;"></div>
+  </div>
+</div>
+
+<!-- ローディング画面 -->
+<div id="screen-loading" class="screen">
+  <div class="loading-candle" id="loading-candle"></div>
+  <p class="loading-title">怪 談 を 紡 い で い る</p>
+  <p class="loading-phase" id="loading-phase">AIが闇の中から物語を呼び起こしています…</p>
+  <div class="prog-wrap">
+    <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+    <div class="prog-pct" id="prog-pct">0%</div>
+  </div>
+  <div class="step-list" id="step-list"></div>
+</div>
+
+<!-- 怪談表示画面 -->
+<div id="screen-story" class="screen">
+  <div class="s-header">
+    <div class="s-title" style="font-size:clamp(1.4rem,7vw,2.4rem)">怪　談　生　成　器</div>
+    <div class="s-sub">─ 闇 の 語 り 部 ─</div>
+  </div>
+  <div class="story-card">
+    <div class="story-title" id="story-title"></div>
+    <div class="story-meta" id="story-meta"></div>
+    <div class="story-body" id="story-body"></div>
+    <div class="action-row">
+      <button class="play-btn" onclick="startPlayer()">▶ 読み上げ</button>
+      <button class="sub-btn" onclick="copyStory()">コピー</button>
+      <button class="sub-btn" onclick="showScreen('screen-input')">再生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- プレイヤー画面 -->
+<div id="screen-player" class="screen">
+  <div class="candle-scene">
+    <div class="wall-glow"></div>
+    <div id="player-candle"></div>
+  </div>
+  <div class="subtitle-area">
+    <div class="subtitle-text" id="subtitle-text">　</div>
+  </div>
+  <div class="ctrl-bar">
+    <button class="ctrl-btn ctrl-normal" id="pause-btn" onclick="togglePause()">一時停止</button>
+    <div class="player-title-bar" id="player-title"></div>
+    <button class="ctrl-btn ctrl-danger" onclick="stopPlayer()">終　了</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  定数
+// ══════════════════════════════════════
+const STEPS = [
+  {pct:12, label:"キーワードを解析中",   phase:"AIがキーワードの怪異を読み解いています…"},
+  {pct:30, label:"怪異の舞台を設定中",   phase:"古の地に舞台を設けています…"},
+  {pct:52, label:"登場人物を召喚中",     phase:"幽世から人物を呼び出しています…"},
+  {pct:74, label:"恐怖の物語を紡ぐ中",  phase:"暗闇から言葉を紡いでいます…"},
+  {pct:92, label:"読み仮名を付けています", phase:"怪しの言葉に魂を吹き込んでいます…"},
+];
+
+// ══════════════════════════════════════
+//  画面管理
+// ══════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ══════════════════════════════════════
+//  ③ リアルなロウソク炎 (Canvas)
+// ══════════════════════════════════════
+let flameRAF = null;
+
+function insertCandle(targetId) {
+  // 既存のアニメーションを止める
+  if (flameRAF) { cancelAnimationFrame(flameRAF); flameRAF = null; }
+
+  const tpl = document.getElementById('candle-tpl');
+  const el = document.getElementById(targetId);
+  el.innerHTML = '';
+  el.appendChild(tpl.content.cloneNode(true));
+
+  const flameCanvas = el.querySelector('#flame-canvas');
+  const glowCanvas  = el.querySelector('#glow-canvas');
+  if (flameCanvas) startFlameAnimation(flameCanvas, glowCanvas);
+}
+
+function startFlameAnimation(fc, gc) {
+  const fw = fc.width, fh = fc.height;
+  const gw = gc.width, gh = gc.height;
+  const fctx = fc.getContext('2d');
+  const gctx = gc.getContext('2d');
+
+  // ノイズ用シンプルなランダムキャッシュ
+  let t = 0;
+  const N = 64;
+  const noise = Array.from({length: N}, () => Math.random());
+  function smoothNoise(x) {
+    const i = Math.floor(x) % N;
+    const j = (i + 1) % N;
+    const f = x - Math.floor(x);
+    return noise[i] * (1 - f) + noise[j] * f;
+  }
+
+  function drawFrame() {
+    t += 0.04;
+
+    // ─── 炎 ───
+    fctx.clearRect(0, 0, fw, fh);
+
+    // 揺れの計算（複数の周波数を重ねてリアルに）
+    const sway   = Math.sin(t * 1.3) * 4 + Math.sin(t * 2.7) * 2 + smoothNoise(t * 0.8) * 6 - 3;
+    const height = 72 + Math.sin(t * 1.1) * 6 + smoothNoise(t * 1.5) * 8;
+    const cx     = fw / 2 + sway;
+    const base   = fh - 2;
+
+    // 外炎（赤〜オレンジ）
+    for (let layer = 0; layer < 6; layer++) {
+      const prog  = layer / 5;
+      const lh    = height * (1 - prog * 0.55);
+      const lw    = (22 - prog * 14) * (1 + smoothNoise(t * 2 + layer) * 0.15);
+      const lsway = sway * (1 - prog * 0.3);
+      const lcx   = fw / 2 + lsway;
+
+      const grad = fctx.createRadialGradient(lcx, base - lh * 0.35, lw * 0.1, lcx, base - lh * 0.35, lh);
+      if (prog < 0.25) {
+        grad.addColorStop(0,   `rgba(255,60,0,${0.85 - prog})`);
+        grad.addColorStop(0.5, `rgba(255,120,0,${0.5 - prog * 0.5})`);
+        grad.addColorStop(1,   'rgba(200,30,0,0)');
+      } else if (prog < 0.6) {
+        grad.addColorStop(0,   `rgba(255,140,0,${0.9 - prog * 0.4})`);
+        grad.addColorStop(0.5, `rgba(255,80,0,${0.5 - prog * 0.3})`);
+        grad.addColorStop(1,   'rgba(180,20,0,0)');
+      } else {
+        grad.addColorStop(0,   `rgba(255,200,80,${0.95 - prog * 0.3})`);
+        grad.addColorStop(0.4, `rgba(255,150,20,${0.6 - prog * 0.3})`);
+        grad.addColorStop(1,   'rgba(255,60,0,0)');
+      }
+
+      fctx.save();
+      fctx.beginPath();
+      // 炎の形状（ベジエ曲線でリアルな輪郭）
+      const tipX = lcx + (smoothNoise(t * 3 + layer) - 0.5) * 6;
+      const tipY = base - lh;
+      fctx.moveTo(lcx - lw, base);
+      fctx.bezierCurveTo(
+        lcx - lw * 1.1, base - lh * 0.4,
+        tipX - lw * 0.2, base - lh * 0.8,
+        tipX, tipY
+      );
+      fctx.bezierCurveTo(
+        tipX + lw * 0.2, base - lh * 0.8,
+        lcx + lw * 1.1, base - lh * 0.4,
+        lcx + lw, base
+      );
+      fctx.closePath();
+      fctx.fillStyle = grad;
+      fctx.filter = `blur(${3 - prog * 2}px)`;
+      fctx.fill();
+      fctx.restore();
+    }
+
+    // 内炎（黄色〜白）
+    for (let layer = 0; layer < 4; layer++) {
+      const prog = layer / 3;
+      const lh   = height * 0.6 * (1 - prog * 0.5);
+      const lw   = (10 - prog * 6) * (1 + smoothNoise(t * 3 + layer + 10) * 0.1);
+      const lcx  = fw / 2 + sway * 0.7;
+
+      const grad = fctx.createRadialGradient(lcx, base - lh * 0.3, 0, lcx, base - lh * 0.3, lh);
+      if (prog < 0.4) {
+        grad.addColorStop(0,   `rgba(255,255,240,${1 - prog * 0.5})`);
+        grad.addColorStop(0.4, `rgba(255,240,120,${0.9 - prog * 0.4})`);
+        grad.addColorStop(1,   'rgba(255,180,0,0)');
+      } else {
+        grad.addColorStop(0,   `rgba(255,240,160,${0.9 - prog * 0.3})`);
+        grad.addColorStop(0.5, `rgba(255,200,60,${0.7 - prog * 0.3})`);
+        grad.addColorStop(1,   'rgba(255,120,0,0)');
+      }
+
+      fctx.save();
+      fctx.beginPath();
+      const tipX = lcx + (smoothNoise(t * 4 + layer + 5) - 0.5) * 3;
+      fctx.moveTo(lcx - lw, base);
+      fctx.bezierCurveTo(lcx - lw * 0.9, base - lh * 0.5, tipX - 2, base - lh * 0.9, tipX, base - lh);
+      fctx.bezierCurveTo(tipX + 2, base - lh * 0.9, lcx + lw * 0.9, base - lh * 0.5, lcx + lw, base);
+      fctx.closePath();
+      fctx.fillStyle = grad;
+      fctx.filter = `blur(${1.5 - prog}px)`;
+      fctx.fill();
+      fctx.restore();
+    }
+
+    // ─── グロー（床・背景への光） ───
+    gctx.clearRect(0, 0, gw, gh);
+    const glowIntensity = 0.18 + Math.sin(t * 1.1) * 0.05 + smoothNoise(t * 2) * 0.04;
+    const grad2 = gctx.createRadialGradient(gw/2, gh * 0.6, 5, gw/2, gh * 0.6, gw * 0.5);
+    grad2.addColorStop(0,   `rgba(255,140,30,${glowIntensity * 1.4})`);
+    grad2.addColorStop(0.3, `rgba(255,80,0,${glowIntensity})`);
+    grad2.addColorStop(0.7, `rgba(180,40,0,${glowIntensity * 0.4})`);
+    grad2.addColorStop(1,   'rgba(0,0,0,0)');
+    gctx.fillStyle = grad2;
+    gctx.fillRect(0, 0, gw, gh);
+
+    flameRAF = requestAnimationFrame(drawFrame);
+  }
+
+  drawFrame();
+}
+
+// ══════════════════════════════════════
+//  プログレス
+// ══════════════════════════════════════
+let progTimer = null;
+
+function buildStepList() {
+  const list = document.getElementById('step-list');
+  list.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'step-item'; div.id = 'step-' + i;
+    div.style.cssText = 'opacity:.3;color:#7a6a55;';
+    div.innerHTML = `<div class="step-dot" id="dot-${i}" style="background:rgba(200,184,154,.2)"></div>${s.label}`;
+    list.appendChild(div);
+  });
+}
+
+function startProgress() {
+  updateBar(0); buildStepList();
+  document.getElementById('loading-phase').textContent = 'AIが闇の中から物語を呼び起こしています…';
+  let elapsed = 0;
+  progTimer = setInterval(() => {
+    elapsed += 0.3;
+    const eased = Math.round(92 * (1 - Math.pow(1 - Math.min(1, elapsed / 30), 1.6)));
+    updateBar(eased);
+    let ns = -1;
+    for (let i = STEPS.length - 1; i >= 0; i--) { if (eased >= STEPS[i].pct) { ns = i; break; } }
+    updateSteps(ns);
+  }, 300);
+}
+
+function updateBar(p) {
+  document.getElementById('prog-fill').style.width = p + '%';
+  document.getElementById('prog-pct').textContent = p + '%';
+}
+
+function updateSteps(a) {
+  STEPS.forEach((s, i) => {
+    const el = document.getElementById('step-' + i);
+    const dot = document.getElementById('dot-' + i);
+    if (!el) return;
+    if (i < a) {
+      el.style.cssText = 'opacity:1;color:#c8b89a;';
+      dot.style.cssText = 'background:#7de8a8;';
+    } else if (i === a) {
+      el.style.cssText = 'opacity:1;color:#ffad5a;';
+      dot.style.cssText = 'background:#ff6b1a;box-shadow:0 0 6px #ff6b1a;';
+      document.getElementById('loading-phase').textContent = s.phase;
+    } else {
+      el.style.cssText = 'opacity:.3;color:#7a6a55;';
+      dot.style.cssText = 'background:rgba(200,184,154,.2);';
+    }
+  });
+}
+
+function stopProgress() {
+  clearInterval(progTimer);
+  updateBar(100); updateSteps(STEPS.length);
+  document.getElementById('loading-phase').textContent = '怪談の完成…';
+}
+
+// ══════════════════════════════════════
+//  怪談生成
+// ══════════════════════════════════════
+let savedTitle = '', savedDisplayBody = '', savedSpeechBody = '', savedKeyword = '';
+
+// ② ルビ処理: 漢字{よみ} 形式
+function toDisplay(text) {
+  // 漢字{よみ} → 漢字
+  return text.replace(/([^{}\s]+)\{([^}]+)\}/g, '$1');
+}
+function toSpeech(text) {
+  // 漢字{よみ} → よみ
+  return text.replace(/([^{}\s]+)\{([^}]+)\}/g, '$2');
+}
+
+async function startGenerate() {
+  const apiKey  = document.getElementById('apikey').value.trim();
+  const keyword = document.getElementById('keyword').value.trim();
+  if (!apiKey)  { alert('APIキーを入力してください'); return; }
+  if (!keyword) { alert('キーワードを入力してください'); return; }
+
+  savedKeyword = keyword;
+  document.getElementById('err-box').style.display = 'none';
+  insertCandle('loading-candle');
+  showScreen('screen-loading');
+  startProgress();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 5000,
+        system: `あなたは日本の伝統的な怪談師です。江戸・明治時代の雰囲気をもつ、不気味で薄気味悪い昔話調の怪談話を創作します。
+
+【ルール】
+- 文体は昔話調（「むかし、むかし」「〜でございます」「〜という話でございます」など）
+- 4000〜5000文字程度
+- 登場人物には古風な和名をつける
+- 後味の悪い結末、怪異の正体は曖昧に
+- 読み間違いを防ぐため、難読漢字・固有名詞・怪談特有の語には必ず「漢字{よみ}」形式でルビを振ること
+  例：古井戸{ふるいど}、怪異{かいい}、祟り{たたり}、魂魄{こんぱく}、辻{つじ}、彼岸{ひがん}、憑依{ひょうい}、禍{わざわい}
+- 一度ルビを振った語は、以降も同じ読みで統一すること
+
+最初の行に「タイトル：〇〇〇〇」と書き、空行の後に本文を書いてください。`,
+        messages: [{ role: 'user', content: `キーワード：${keyword}\n\nこのキーワードから着想を得て怪談を書いてください。` }]
+      })
+    });
+
+    const data = await res.json();
+    const raw  = data?.content?.[0]?.text;
+    if (!raw) throw new Error(data?.error?.message || 'レスポンスが空 status:' + res.status);
+
+    const lines = raw.split('\n');
+    let title = '名無しの怪談', bs = 0;
+    for (let i = 0; i < Math.min(4, lines.length); i++) {
+      if (/^タイトル[：:]/.test(lines[i])) {
+        title = lines[i].replace(/^タイトル[：:]/, '').trim(); bs = i + 1; break;
+      }
+    }
+    while (bs < lines.length && !lines[bs].trim()) bs++;
+    const rawBody = lines.slice(bs).join('\n').trim();
+
+    savedTitle       = toDisplay(title);
+    savedDisplayBody = toDisplay(rawBody);
+    savedSpeechBody  = toSpeech(rawBody);
+
+    stopProgress();
+    setTimeout(() => {
+      document.getElementById('story-title').textContent = savedTitle;
+      document.getElementById('story-meta').textContent  = `キーワード：${keyword}　│　約${savedDisplayBody.length}文字`;
+      document.getElementById('story-body').textContent  = savedDisplayBody;
+      showScreen('screen-story');
+    }, 700);
+
+  } catch (err) {
+    stopProgress();
+    setTimeout(() => {
+      showScreen('screen-input');
+      const eb = document.getElementById('err-box');
+      eb.textContent = '⚠ エラー：' + err.message;
+      eb.style.display = 'block';
+    }, 400);
+  }
+}
+
+// ══════════════════════════════════════
+//  ① 文分割（句点・読点で自然に区切る）
+// ══════════════════════════════════════
+function splitSentences(text) {
+  const result = [];
+  // まず段落（改行）で分割
+  const paragraphs = text.split(/\n+/).filter(p => p.trim());
+
+  for (const para of paragraphs) {
+    // 句点・感嘆符・疑問符で分割（区切り文字は前の文に含める）
+    const segs = para.split(/(?<=[。！？…])/).filter(s => s.trim());
+    for (const seg of segs) {
+      const s = seg.trim();
+      if (!s) continue;
+      // 40文字以下ならそのまま
+      if (s.length <= 40) {
+        result.push({ text: s, isParagraphEnd: false });
+      } else {
+        // 長い場合は読点でさらに分割
+        const sub = s.split(/(?<=、)/).filter(x => x.trim());
+        sub.forEach((x, i) => {
+          if (x.trim()) result.push({ text: x.trim(), isParagraphEnd: false });
+        });
+      }
+    }
+    // 段落末にフラグ
+    if (result.length > 0) result[result.length - 1].isParagraphEnd = true;
+  }
+  return result;
+}
+
+// ④ 緩急のポーズ計算
+function getPause(seg) {
+  const t = seg.text;
+  let base = 350;
+  if (t.endsWith('。'))      base = 700;
+  else if (t.endsWith('…')) base = 900;
+  else if (t.endsWith('！') || t.endsWith('？')) base = 600;
+  else if (t.endsWith('、')) base = 250;
+  if (seg.isParagraphEnd)    base += 600;  // 段落末は長め
+  // ±100msのランダムゆらぎ
+  return base + (Math.random() * 200 - 100);
+}
+
+// ══════════════════════════════════════
+//  音声読み上げ
+// ══════════════════════════════════════
+let segments = [], segIdx = 0, isPaused = false;
+
+function startPlayer() {
+  if (!savedSpeechBody || !window.speechSynthesis) { alert('音声読み上げに対応していません'); return; }
+  window.speechSynthesis.cancel();
+  segments = splitSentences(savedSpeechBody);
+  segIdx = 0; isPaused = false;
+  insertCandle('player-candle');
+  document.getElementById('player-title').textContent  = savedTitle;
+  document.getElementById('pause-btn').textContent = '一時停止';
+  showScreen('screen-player');
+  setTimeout(() => speakAt(0), 500);
+}
+
+function speakAt(idx) {
+  if (idx >= segments.length) {
+    updateSubtitle('─ 語り終わりました ─');
+    setTimeout(() => { showScreen('screen-story'); updateSubtitle('　'); }, 3500);
+    return;
+  }
+
+  const seg = segments[idx];
+  // 字幕は表示用テキスト（漢字表記）を使う
+  const displaySegs = splitSentences(savedDisplayBody);
+  const displayText = displaySegs[idx] ? displaySegs[idx].text : seg.text;
+  updateSubtitle(displayText);
+
+  const utt = new SpeechSynthesisUtterance(seg.text);
+  utt.lang = 'ja-JP'; utt.rate = 0.78; utt.pitch = 0.5; utt.volume = 1.0;
+
+  const voices = window.speechSynthesis.getVoices();
+  const jp = voices.filter(v => v.lang.startsWith('ja'));
+  if (jp.length) {
+    utt.voice = jp.find(v => /男|otoya|ichiro|male/i.test(v.name)) || jp[jp.length - 1];
+  }
+
+  utt.onend = () => {
+    if (isPaused) return;
+    segIdx++;
+    const pause = getPause(seg);
+    setTimeout(() => speakAt(segIdx), pause);
+  };
+  utt.onerror = (e) => {
+    if (e.error !== 'interrupted') { segIdx++; speakAt(segIdx); }
+  };
+
+  window.speechSynthesis.speak(utt);
+}
+
+function updateSubtitle(text) {
+  const el = document.getElementById('subtitle-text');
+  el.classList.add('fade');
+  setTimeout(() => { el.textContent = text || '　'; el.classList.remove('fade'); }, 300);
+}
+
+function togglePause() {
+  if (isPaused) {
+    isPaused = false;
+    window.speechSynthesis.resume();
+    document.getElementById('pause-btn').textContent = '一時停止';
+  } else {
+    isPaused = true;
+    window.speechSynthesis.pause();
+    document.getElementById('pause-btn').textContent = '再　　開';
+  }
+}
+
+function stopPlayer() {
+  window.speechSynthesis.cancel();
+  if (flameRAF) { cancelAnimationFrame(flameRAF); flameRAF = null; }
+  isPaused = false;
+  showScreen('screen-story');
+}
+
+function copyStory() {
+  const text = savedTitle + '\n\n' + savedDisplayBody;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => alert('コピーしました'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); alert('コピーしました');
+  }
+}
+
+window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+window.addEventListener('beforeunload', () => { window.speechSynthesis.cancel(); });
+</script>
+</body>
+</html>
